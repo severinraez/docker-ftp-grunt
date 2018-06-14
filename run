@@ -2,6 +2,11 @@
 
 set -e pipefail
 
+
+
+
+# SET UP PARAMETERS
+
 function require_env() {
   varname="$1"
   value="${!varname}"
@@ -20,6 +25,11 @@ password=$(require_env 'PASSWORD')
 target_folder=$(require_env 'TARGET_FOLDER')
 paths_list=$(require_env 'PATHS_LIST')
 
+
+
+
+# WRITE LFTP COMMANDS
+
 options=""
 if [[ "$SKIP_SSL_VERIFICATION" == '1' ]]; then
   options="set ssl:verify-certificate false"
@@ -37,18 +47,19 @@ urldecode_file() {
 
 mirror_commands=$(
     urldecode_file $paths_list | \
-        # Escape spaces in paths
-        sed 's/ /\\ /' |\
         sed -r "
             # Remove comments, empty lines
             /^#/d
             /^$/d
 
-            s#(.*)+#mirror --verbose \1 $target_folder\1#g
+            # Map each path to a mirror command
+            s#(.*)+#mirror --verbose \"\1\" \"$target_folder\1\"#g
         "
 )
 
-commands="
+commands_file=$(mktemp)
+
+echo "
 $options
 
 open $host
@@ -57,8 +68,13 @@ user $user $password
 $mirror_commands
 
 bye
-"
+" > $commands_file
 
-echo "$commands" | sed 's/^user.*/user REDACTED/'
 
-lftp -f "$commands"
+
+
+# PERFORM FTP TRANSFER
+
+cat $commands_file | sed 's/^user.*/user REDACTED/'
+
+lftp -f $commands_file
