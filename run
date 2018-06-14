@@ -44,7 +44,7 @@ mirror_commands=$(
             /^#/d
             /^$/d
 
-            s#(.*)+#mirror --verbose \1$target_folder\1#g
+            s#(.*)+#mirror --verbose \1 $target_folder\1#g
         "
 )
 
