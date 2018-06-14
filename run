@@ -25,10 +25,27 @@ if [[ "$SKIP_SSL_VERIFICATION" == '1' ]]; then
   options="set ssl:verify-certificate false"
 fi
 
+# Black magic from https://stackoverflow.com/questions/6250698/how-to-decode-url-encoded-string-in-shell
+urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+
+urldecode_file() {
+    file=$1
+    while IFS='' read -r line || [[ -n "$line" ]]; do
+        urldecode "$line"
+    done < "$1"
+}
+
 mirror_commands=$(
-  cat $paths_list | sed -r "
-    s#(.*)+#lcd \1\nmirror --verbose \1 $target_folder\1#g
-  "
+    urldecode_file $paths_list | \
+        # Escape spaces in paths
+        sed 's/ /\\ /' |\
+        sed -r "
+            # Remove comments, empty lines
+            /^#/d
+            /^$/d
+
+            s#(.*)+#mirror --verbose \1$target_folder\1#g
+        "
 )
 
 commands="
@@ -42,5 +59,6 @@ $mirror_commands
 bye
 "
 
+echo "$commands" | sed 's/^user.*/user REDACTED/'
+
 lftp -f "$commands"
-echo "$commands"
