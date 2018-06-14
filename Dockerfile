@@ -13,6 +13,10 @@ RUN \
 
 USER app
 
+ENV \
+  TARGET_FOLDER=/opt/grunt/download \
+  PATHS_LIST=/opt/grunt/paths_list
+
 WORKDIR /opt/grunt
 
-COMMAND run
+CMD ./run

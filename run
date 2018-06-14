@@ -1,2 +1,46 @@
 #!/bin/bash
 
+set -e pipefail
+
+function require_env() {
+  varname="$1"
+  value="${!varname}"
+
+  if [ -z "$value" ]; then
+    echo "Set $varname" 1>&2
+    exit 1
+  fi
+
+  echo $value
+}
+
+host=$(require_env 'HOST')
+user=$(require_env 'USER')
+password=$(require_env 'PASSWORD')
+target_folder=$(require_env 'TARGET_FOLDER')
+paths_list=$(require_env 'PATHS_LIST')
+
+options=""
+if [[ "$SKIP_SSL_VERIFICATION" == '1' ]]; then
+  options="set ssl:verify-certificate false"
+fi
+
+mirror_commands=$(
+  cat $paths_list | sed -r "
+    s#(.*)+#lcd \1\nmirror --verbose \1 $target_folder\1#g
+  "
+)
+
+commands="
+$options
+
+open $host
+user $user $password
+
+$mirror_commands
+
+bye
+"
+
+lftp -f "$commands"
+echo "$commands"

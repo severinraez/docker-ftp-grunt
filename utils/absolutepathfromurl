@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Looks at stdin, prints to stdout replacing
+# FTP links in the format ftp://USER@HOST/a/directory
+# by absolute paths such as /a/directory
+
+sed -r '
+  s#^ftp://[^/]+/(.*)#/\1#
+'
