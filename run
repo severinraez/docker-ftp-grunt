@@ -24,16 +24,45 @@ user=$(require_env 'USER')
 password=$(require_env 'PASSWORD')
 target_folder=$(require_env 'TARGET_FOLDER')
 paths_list=$(require_env 'PATHS_LIST')
+skip_ssl_verification=$SKIP_SSL_VERIFICATION
 
 
 
 
-# WRITE LFTP COMMANDS
+# SET UP FTP HELPERS
 
 options=""
-if [[ "$SKIP_SSL_VERIFICATION" == '1' ]]; then
-  options="set ssl:verify-certificate false"
+if [[ "$skip_ssl_verification" == '1' ]]; then
+    options="set ssl:verify-certificate false"
 fi
+
+run_commands() {
+    commands="$1"
+
+    commands_file=$(mktemp)
+
+    echo "
+        $options
+
+        open $host
+        user $user $password
+
+        $commands
+
+        bye
+    " > $commands_file
+
+    # Will break the script because garbling the directory
+    # listing
+    # cat $commands_file | sed 's/^user/user REDACTED/'
+
+    lftp -f $commands_file
+}
+
+
+
+
+# DETERMINE WHETHER PATHS ARE FILES OR FOLDERS
 
 # Black magic from https://stackoverflow.com/questions/6250698/how-to-decode-url-encoded-string-in-shell
 urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
@@ -42,14 +71,69 @@ urldecode_file() {
     file=$1
     while IFS='' read -r line || [[ -n "$line" ]]; do
         urldecode "$line"
-    done < "$1"
+    done < "$file"
 }
 
-mirror_commands=$(
-    urldecode_file $paths_list | \
+paths_file=$(mktemp)
+
+urldecode_file $paths_list | \
+    sed -r "
+         # Remove comments, empty lines
+         /^#/d
+         /^$/d
+    " > $paths_file
+
+ls_command=$(
+    echo 'cls -dF1 \'
+    cat $paths_file | \
+        sed -r '
+            # Quote
+            s/(.*)/"\1"/
+
+            # Skip last line
+            ${bend}
+
+            # Add trailing backslash
+            s/$/ \\/
+
+            :end
+        '
+)
+
+ls_output_file=$(mktemp)
+run_commands "$ls_command" > $ls_output_file
+
+# Split files and folders
+folder_paths_file=$(mktemp)
+file_paths_file=$(mktemp)
+cat $ls_output_file | grep -E '/$' > $folder_paths_file
+cat $ls_output_file | grep -E '[^/]$' > $file_paths_file
+
+
+
+
+# FIND MISSING FILES
+
+list_missing_files() {
+    file=$1
+    while IFS='' read -r line || [[ -n "$line" ]]; do
+        if [ ! -e "$target_folder/$line" ]; then
+            echo $line
+        fi
+    done < "$file"
+}
+
+missing_files=$(list_missing_files $file_paths_file)
+
+
+
+
+
+# TRANSFER FILES
+
+mirror_directories_commands=$(
+    cat "$folder_paths_file" | \
         sed -r "
-            # Remove comments, empty lines
-            /^#/d
             /^$/d
 
             # Map each path to a mirror command
@@ -57,24 +141,27 @@ mirror_commands=$(
         "
 )
 
-commands_file=$(mktemp)
+copy_files_commands=$(
+    echo "$missing_files" | \
+        sed -r "
+            /^$/d
+
+            # Map each path to a get command
+            s#(.*)+#get \"\1\" -o \"$target_folder\1\"#g
+        "
+)
 
 echo "
-$options
+    Commands:
 
-open $host
-user $user $password
+    # File copying
+    $copy_files_commands
 
-$mirror_commands
+    # Directory mirroring
+    $mirror_directories_commands
+"
 
-bye
-" > $commands_file
-
-
-
-
-# PERFORM FTP TRANSFER
-
-cat $commands_file | sed 's/^user.*/user REDACTED/'
-
-lftp -f $commands_file
+run_commands "
+    $copy_files_commands
+    $mirror_directories_commands
+"
