@@ -137,7 +137,7 @@ mirror_directories_commands=$(
             /^$/d
 
             # Map each path to a mirror command
-            s#(.*)+#mirror --verbose \"\1\" \"$target_folder\1\"#g
+            s#(.*)+#\!mkdir -p \"$target_folder\1\"\nmirror --verbose \"\1\" \"$target_folder\1\"#g
         "
 )
 
@@ -147,7 +147,7 @@ copy_files_commands=$(
             /^$/d
 
             # Map each path to a get command
-            s#(.*)+#get \"\1\" -o \"$target_folder\1\"#g
+            s#(.*)+(/[^/]+)#\!mkdir -p \"$target_folder\1\"\nget \"\1\2\" -o \"$target_folder\1\2\"#g
         "
 )
 
