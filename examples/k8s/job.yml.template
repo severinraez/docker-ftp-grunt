@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synchronize-ftp
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      securityContext:
+        runAsUser: 1000 # Change this to the user you want to have the files owned by.
+      containers:
+      - name: grunt
+        image: registry:30000/severinraez/ftp-grunt # Change this
+        imagePullPolicy: Always
+        env:
+          - name: SKIP_SSL_VERIFICATION # Change to "1" if needed.
+            value: 0
+          - name: PATHS_LIST
+            value: /opt/paths/paths
+          - name: HOST
+            valueFrom:
+              secretKeyRef:
+                name: ftp-credentials
+                key: host
+          - name: USER
+            valueFrom:
+              secretKeyRef:
+                name: ftp-credentials
+                key: user
+          - name: PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: ftp-credentials
+                key: password
+        volumeMounts:
+          - name: download
+            mountPath: /opt/grunt/download
+          - name: paths
+            mountPath: /opt/paths
+      restartPolicy: Never
+      volumes:
+        - name: download
+          hostPath:
+            path: nil # Change this.
+        - name: paths
+          configMap:
+            name: ftp-paths-list
