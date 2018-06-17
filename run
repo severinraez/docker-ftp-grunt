@@ -81,6 +81,9 @@ urldecode_file $paths_list | \
          # Remove comments, empty lines
          /^#/d
          /^$/d
+         # Escape brackets
+         s/\[/\\\[/g
+         s/\]/\\\]/g
     " > $paths_file
 
 ls_command=$(
